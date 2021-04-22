@@ -31,7 +31,7 @@ if [ -d "$CODE_SUBFOLDER" ]; then
 	mkdir -p dist
 	rm -Rf dist/*
 	cd "$CODE_SUBFOLDER"
-	npm ci
+	NODE_ENV=production npm ci
 	zip -r "../${BUILD_IDENTIFIER}.zip" *
 	cd ..
 
@@ -47,3 +47,8 @@ aws cloudformation deploy --stack-name "$PROJECT"\
 	--no-fail-on-empty-changeset \
 	--capabilities CAPABILITY_IAM \
 	--parameter-overrides "BuildIdentifier=${BUILD_IDENTIFIER}"
+
+aws cloudformation describe-stacks \
+	--stack-name failure-lambda-demo \
+	--query "Stacks[0].Outputs[?OutputKey=='WebUri'].OutputValue" \
+	--output text \

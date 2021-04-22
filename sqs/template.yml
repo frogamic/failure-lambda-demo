@@ -10,6 +10,48 @@ Resources:
     Properties:
       AccessControl: BucketOwnerFullControl
 
+  GraveyardTrigger:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 1
+      Enabled: true
+      EventSourceArn: !GetAtt DeadLetterQueue.Arn
+      FunctionName: !GetAtt LambdaGraveyard.Arn
+
+  LambdaGraveyard:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: nodejs12.x
+      Handler: worker.handler
+      Code:
+        S3Bucket: !Ref DeployBucket
+        S3Key: !Sub ${BuildIdentifier}.zip
+      Environment:
+        Variables:
+          WorkerRole: Graveyard
+
+  WorkerTrigger:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 1
+      Enabled: true
+      EventSourceArn: !GetAtt NotificationQueue.Arn
+      FunctionName: !GetAtt LambdaWorker.Arn
+
+  LambdaWorker:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: nodejs12.x
+      Handler: worker.handler
+      Code:
+        S3Bucket: !Ref DeployBucket
+        S3Key: !Sub ${BuildIdentifier}.zip
+      Environment:
+        Variables:
+          WorkerRole: Notifier
+
   LambdaBff:
     Type: AWS::Lambda::Function
     Properties:
@@ -19,6 +61,9 @@ Resources:
       Code:
         S3Bucket: !Ref DeployBucket
         S3Key: !Sub ${BuildIdentifier}.zip
+      Environment:
+        Variables:
+          QueueUrl: !Ref NotificationQueue
 
   BffRole:
     Type: AWS::IAM::Role
@@ -46,7 +91,7 @@ Resources:
   LambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: Bare minimum lambda execution role
+      Description: lambda execution role can use sqs
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -58,6 +103,30 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SQS-Queues
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - SQS:*
+                Resource: 
+                  - !GetAtt NotificationQueue.Arn
+                  - !GetAtt DeadLetterQueue.Arn
+
+  NotificationQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 10
+      RedrivePolicy: !Sub
+        - '{"deadLetterTargetArn":"${dlq}","maxReceiveCount":5}'
+        - dlq: !GetAtt DeadLetterQueue.Arn
+
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
 
   BffApi:
     Type: AWS::ApiGatewayV2::Api
