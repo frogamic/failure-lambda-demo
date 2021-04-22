@@ -3,9 +3,6 @@ AWSTemplateFormatVersion: 2010-09-09
 Parameters:
   BuildIdentifier:
     Type: String
-  Stage:
-    Type: String
-    Default: prod
 
 Resources:
   DeployBucket:
@@ -23,10 +20,10 @@ Resources:
         S3Bucket: !Ref DeployBucket
         S3Key: !Sub ${BuildIdentifier}.zip
 
-  WebserverRole:
+  BffRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: Can read the index doc in deployment bucket
+      Description: Can run BFF lambda
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -37,15 +34,14 @@ Resources:
             Action:
               - sts:AssumeRole
       Policies:
-        - PolicyName: Webserver
+        - PolicyName: BffExecute
           PolicyDocument:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
-                  - s3:GetObject
-                Resource:
-                  - !Sub arn:aws:s3:::${DeployBucket}/index.html
+                  - lambda:InvokeFunction
+                Resource: !GetAtt LambdaBff.Arn
 
   LambdaRole:
     Type: AWS::IAM::Role
@@ -63,77 +59,15 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
-  BffApiDeployment:
-    Type: AWS::ApiGateway::Deployment
-    DependsOn:
-      - BffApiGet
-      - BffApiPost
-    Properties:
-      RestApiId: !Ref BffApi
-      StageName: !Ref Stage
-
   BffApi:
-    Type: AWS::ApiGateway::RestApi
+    Type: AWS::ApiGatewayV2::Api
     Properties:
-      Name: !Sub ${AWS::StackName}-bff
-      EndpointConfiguration:
-        Types:
-          - REGIONAL
-
-  BffApiGet:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      AuthorizationType: NONE
-      HttpMethod: GET
-      ResourceId: !GetAtt BffApi.RootResourceId
-      RestApiId: !Ref BffApi
-      RequestParameters:
-        method.request.header.Host: false
-        method.request.header.User-Agent: false
-      MethodResponses:
-        - StatusCode: '200'
-          ResponseParameters:
-            method.response.header.Content-Type: true
-            method.response.header.Content-Length: true
-            method.response.header.Timestamp: true
-      Integration:
-        Type: AWS
-        Credentials: !GetAtt WebserverRole.Arn
-        IntegrationHttpMethod: GET
-        PassthroughBehavior: WHEN_NO_MATCH
-        Uri: !Sub arn:aws:apigateway:${AWS::Region}:s3:path/${DeployBucket}/index.html
-        IntegrationResponses:
-          - SelectionPattern: 4\d{2}
-            StatusCode: '400'
-          - SelectionPattern: 5\d{2}
-            StatusCode: '500'
-          - StatusCode: '200'
-            ResponseParameters:
-              method.response.header.Content-Type: integration.response.header.Content-Type
-              method.response.header.Content-Length: integration.response.header.Content-Length
-              method.response.header.Timestamp: integration.response.header.Date
-
-  BffApiPost:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      AuthorizationType: NONE
-      HttpMethod: POST
-      ResourceId: !GetAtt BffApi.RootResourceId
-      RestApiId: !Ref BffApi
-      Integration:
-        IntegrationHttpMethod: POST
-        Type: AWS_PROXY
-        Uri: !Sub
-          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations
-          - lambdaArn: !GetAtt LambdaBff.Arn
-
-  LambdaInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt LambdaBff.Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${BffApi}/${Stage}/*/
+      Name: !Sub ${AWS::StackName}-bff-api
+      ProtocolType: HTTP
+      CredentialsArn: !GetAtt BffRole.Arn
+      Target: !Sub
+        - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations
+        - FunctionArn: !GetAtt LambdaBff.Arn
 
 Outputs:
   DeployBucket:

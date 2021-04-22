@@ -37,7 +37,6 @@ if [ -d "$CODE_SUBFOLDER" ]; then
 
 	aws s3 cp "${BUILD_IDENTIFIER}.zip" "s3://${DEPLOY_BUCKET}/"
 	rm "${BUILD_IDENTIFIER}.zip"
-	aws s3 cp "../index.html" "s3://${DEPLOY_BUCKET}/"
 fi
 
 echo
