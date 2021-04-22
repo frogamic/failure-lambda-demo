@@ -1,0 +1,140 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  BuildIdentifier:
+    Type: String
+  Stage:
+    Type: String
+    Default: prod
+
+Resources:
+  DeployBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: BucketOwnerFullControl
+
+  LambdaBff:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: nodejs12.x
+      Handler: bff.handler
+      Code:
+        S3Bucket: !Ref DeployBucket
+        S3Key: !Sub ${BuildIdentifier}.zip
+
+  WebserverRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Can read the index doc in deployment bucket
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - apigateway.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Webserver
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  - !Sub arn:aws:s3:::${DeployBucket}/index.html
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Bare minimum lambda execution role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  BffApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - BffApiGet
+      - BffApiPost
+    Properties:
+      RestApiId: !Ref BffApi
+      StageName: !Ref Stage
+
+  BffApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub ${AWS::StackName}-bff
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  BffApiGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: GET
+      ResourceId: !GetAtt BffApi.RootResourceId
+      RestApiId: !Ref BffApi
+      RequestParameters:
+        method.request.header.Host: false
+        method.request.header.User-Agent: false
+      MethodResponses:
+        - StatusCode: '200'
+          ResponseParameters:
+            method.response.header.Content-Type: true
+            method.response.header.Content-Length: true
+            method.response.header.Timestamp: true
+      Integration:
+        Type: AWS
+        Credentials: !GetAtt WebserverRole.Arn
+        IntegrationHttpMethod: GET
+        PassthroughBehavior: WHEN_NO_MATCH
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:s3:path/${DeployBucket}/index.html
+        IntegrationResponses:
+          - SelectionPattern: 4\d{2}
+            StatusCode: '400'
+          - SelectionPattern: 5\d{2}
+            StatusCode: '500'
+          - StatusCode: '200'
+            ResponseParameters:
+              method.response.header.Content-Type: integration.response.header.Content-Type
+              method.response.header.Content-Length: integration.response.header.Content-Length
+              method.response.header.Timestamp: integration.response.header.Date
+
+  BffApiPost:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      ResourceId: !GetAtt BffApi.RootResourceId
+      RestApiId: !Ref BffApi
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations
+          - lambdaArn: !GetAtt LambdaBff.Arn
+
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LambdaBff.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${BffApi}/${Stage}/*/
+
+Outputs:
+  DeployBucket:
+    Value: !Ref DeployBucket

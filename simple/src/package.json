@@ -1,0 +1,12 @@
+{
+  "name": "failure-lambda-demo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "bff.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Dominic Shelton",
+  "license": "ISC",
+  "dependencies": {}
+}
