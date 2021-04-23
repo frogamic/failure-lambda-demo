@@ -8,5 +8,8 @@
   },
   "author": "Dominic Shelton",
   "license": "ISC",
-  "devDependencies": {}
+  "devDependencies": {},
+  "dependencies": {
+    "failure-lambda": "^0.4.2"
+  }
 }

@@ -10,6 +10,22 @@ Resources:
     Properties:
       AccessControl: BucketOwnerFullControl
 
+  BffFailureParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /app/${AWS::StackName}/failure-lambda-config/bff
+      Description: failure-lambda config for bff lambda
+      Type: String
+      Value: '{"isEnabled":false,"failureMode":"latency","rate":1,"minLatency":100,"maxLatency":400,"exceptionMsg":"error","statusCode":404,"diskSpace":100,"denylist":[]}'
+
+  WorkerFailureParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /app/${AWS::StackName}/failure-lambda-config/worker
+      Description: failure-lambda config for worker lambda
+      Type: String
+      Value: '{"isEnabled":false,"failureMode":"latency","rate":1,"minLatency":100,"maxLatency":400,"exceptionMsg":"error","statusCode":404,"diskSpace":100,"denylist":[]}'
+
   GraveyardTrigger:
     Type: AWS::Lambda::EventSourceMapping
     Properties:
@@ -51,6 +67,7 @@ Resources:
       Environment:
         Variables:
           WorkerRole: Notifier
+          FAILURE_INJECTION_PARAM: !Ref WorkerFailureParam
 
   LambdaBff:
     Type: AWS::Lambda::Function
@@ -64,6 +81,7 @@ Resources:
       Environment:
         Variables:
           QueueUrl: !Ref NotificationQueue
+          FAILURE_INJECTION_PARAM: !Ref BffFailureParam
 
   BffRole:
     Type: AWS::IAM::Role
@@ -114,6 +132,17 @@ Resources:
                 Resource: 
                   - !GetAtt NotificationQueue.Arn
                   - !GetAtt DeadLetterQueue.Arn
+        - PolicyName: Failure-lambda-param
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - SSM:GetParametersByPath
+                  - SSM:GetParameters
+                  - SSM:GetParameter
+                Resource: 
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/app/${AWS::StackName}/failure-lambda-config/*
 
   NotificationQueue:
     Type: AWS::SQS::Queue

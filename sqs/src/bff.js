@@ -1,12 +1,13 @@
 const querystring = require('querystring');
 const { readFile } = require('fs').promises;
 const { resolve } = require('path');
+const failureLambda = require('failure-lambda');
 const AWS = require('aws-sdk');
 
 AWS.config.update({ region: 'ap-southeast-2' });
 const sqs = new AWS.SQS({ apiVersion: '2012-11-05' });
 
-exports.handler = async ({ body }) => {
+exports.handler = failureLambda(async ({ body }) => {
 	let response;
 	if (body) {
 		const submission = querystring.parse(Buffer.from(body, 'base64').toString('ascii'));
@@ -26,4 +27,4 @@ exports.handler = async ({ body }) => {
 			statusCode: 200,
 			body: response,
 		};
-};
+});
