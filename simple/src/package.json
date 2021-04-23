@@ -8,5 +8,7 @@
   },
   "author": "Dominic Shelton",
   "license": "ISC",
-  "dependencies": {}
+  "dependencies": {
+    "node-fetch": "^2.6.1"
+  }
 }

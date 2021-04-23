@@ -1,11 +1,13 @@
 const querystring = require('querystring');
 const { readFile } = require('fs').promises;
 const { resolve } = require('path');
+const fetch = require('node-fetch');
 
 exports.handler = async ({ body }) => {
 	let response;
 	if (body) {
 		const submission = querystring.parse(Buffer.from(body, 'base64').toString('ascii'));
+		await fetch('https://example.com/ingest');
 		console.dir(JSON.stringify(submission));
 		response = `<html><head><title>Thanks</title></head><body><h1>Thanks ${submission.name}</h1></body></html>`;
 	} else {
