@@ -2,8 +2,10 @@ const querystring = require('querystring');
 const { readFile } = require('fs').promises;
 const { resolve } = require('path');
 const fetch = require('node-fetch');
+const failureLambda = require('failure-lambda');
 
-exports.handler = async ({ body }) => {
+
+exports.handler = failureLambda(async ({ body }) => {
 	let response;
 	if (body) {
 		const submission = querystring.parse(Buffer.from(body, 'base64').toString('ascii'));
@@ -20,4 +22,4 @@ exports.handler = async ({ body }) => {
 			statusCode: 200,
 			body: response,
 		};
-};
+});

@@ -141,7 +141,7 @@ Resources:
                   - SSM:GetParametersByPath
                   - SSM:GetParameters
                   - SSM:GetParameter
-                Resource: 
+                Resource:
                   - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/app/${AWS::StackName}/failure-lambda-config/*
 
   NotificationQueue:

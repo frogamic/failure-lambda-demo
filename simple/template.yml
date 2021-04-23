@@ -10,6 +10,14 @@ Resources:
     Properties:
       AccessControl: BucketOwnerFullControl
 
+  BffFailureParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /app/${AWS::StackName}/failure-lambda-config/bff
+      Description: failure-lambda config for bff lambda
+      Type: String
+      Value: '{"isEnabled":false,"failureMode":"latency","rate":1,"minLatency":100,"maxLatency":400,"exceptionMsg":"error","statusCode":404,"diskSpace":100,"denylist":[]}'
+
   LambdaBff:
     Type: AWS::Lambda::Function
     Properties:
@@ -19,6 +27,17 @@ Resources:
       Code:
         S3Bucket: !Ref DeployBucket
         S3Key: !Sub ${BuildIdentifier}.zip
+      Environment:
+        Variables:
+          FAILURE_INJECTION_PARAM: !Ref BffFailureParam
+
+  FailureParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /app/failure-lambda-config/bff
+      Description: failure-lambda config
+      Type: String
+      Value: '{"isEnabled":false,"failureMode":"latency","rate":1,"minLatency":100,"maxLatency":400,"exceptionMsg":"error","statusCode":404,"diskSpace":100,"denylist":[]}'
 
   BffRole:
     Type: AWS::IAM::Role
@@ -58,6 +77,18 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: Failure-lambda-param
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - SSM:GetParametersByPath
+                  - SSM:GetParameters
+                  - SSM:GetParameter
+                Resource:
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/app/${AWS::StackName}/failure-lambda-config/*
 
   BffApi:
     Type: AWS::ApiGatewayV2::Api
